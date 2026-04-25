@@ -1,0 +1,291 @@
+---
+title: "649"
+author: "Groupe 5"
+date: "2023-11-20"
+output: html_document
+---
+
+
+
+
+```{r}
+library(tidyverse)
+library(astsa)
+library(forecast)
+library(stats)
+library(ggplot2)
+library(quantmod)
+library(dplyr)
+library(tidyquant)
+library(timetk)
+library(tidyr)
+library(zoo)
+library(PerformanceAnalytics)
+library(rugarch)
+```
+
+
+
+
+
+
+
+```{r}
+project_Data=read.csv("data_return.csv")
+
+#equal weight
+weights=c(0.5, 0.5)
+#  calculate portfolio returns
+portfolio_returns <- weights[1] * project_Data$WTI_Return + weights[2] * project_Data$HHUB_Return
+  
+```
+
+
+
+
+```{r}
+project_Data=read.csv("data_return.csv")
+
+#equal weight
+weights=c(0.5, 0.5)
+#  calculate portfolio returns
+portfolio_returns <- weights[1] * project_Data$WTI_Return + weights[2] * project_Data$HHUB_Return
+ project_Data$portfolio_returns<-portfolio_returns  
+```
+
+
+
+
+```{r}
+# Function to calculate GARCH volatility and VaR
+calculate_garch_var_daily <- function(returns, omega, alpha, beta, confidence_level) {
+  n <- length(returns)
+  garch_volatility_1<- numeric(n)
+  var_garch_1 <- numeric(n)
+  
+  for (i in 2:n) {
+    garch_volatility_1[i] <- sqrt(omega + alpha * returns[i-1]^2 + beta * garch_volatility_1[i-1]^2)
+    
+    # Assuming a normal distribution for simplicity
+    z_score <- qnorm(1 - (1 - confidence_level) / 2)
+    var_garch_1[i] <- garch_volatility_1[i] * z_score
+  }
+  
+  return(list(volatility = garch_volatility_1, VaR = var_garch_1))
+}
+
+# Set parameters
+omega_GARCH <- 0.0001
+alpha_GARCH <- 0.1
+beta_GARCH <- 0.8
+confidence_level <- 0.95
+
+# Calculate GARCH volatility and VaR for the portfolio
+garch_results <- calculate_garch_var_daily(portfolio_returns, omega_GARCH, alpha_GARCH, beta_GARCH, confidence_level)
+
+# Print results (for example, printing the first 10 values)
+cat("Portfolio GARCH Volatility:\n", head(garch_results$volatility, 10), "\n")
+cat("Portfolio GARCH VaR:\n", head(garch_results$VaR*initial_asset_value, 10), "\n")
+
+
+# Function to calculate EWMA volatility and VaR
+calculate_ewma_var_daily <- function(returns, lambda, confidence_level) {
+  n <- length(returns)
+  ewma_volatility <- numeric(n)
+  var_ewma <- numeric(n)
+  
+  for (i in 2:n) {
+    ewma_volatility[i] <- sqrt(EMA(returns[i]^2, n = 1, alpha = lambda, wilder = FALSE))
+    
+    # Assuming a normal distribution for simplicity
+    z_score <- qnorm(1 - (1 - confidence_level) / 2)
+    var_ewma[i] <- ewma_volatility[i] * z_score
+  }
+  
+  return(list(volatility = ewma_volatility, VaR = var_ewma))
+}
+
+# Set parameters
+lambda_EWMA <- 0.94
+
+# Calculate EWMA volatility and VaR for the portfolio
+ewma_results <- calculate_ewma_var_daily(portfolio_returns, lambda_EWMA, confidence_level)
+
+# Print results (for example, printing the first 10 values)
+cat("Portfolio EWMA Volatility:\n", head(ewma_results$volatility, 10), "\n")
+cat("Portfolio EWMA VaR:\n", head(ewma_results$VaR*initial_asset_value, 10), "\n")
+
+```
+```{r}
+# Function to calculate SMA volatility and VaR
+calculate_sma_var_daily <- function(returns, window_size, confidence_level) {
+  n <- length(returns)
+  sma_volatility <- numeric(n)
+  var_sma <- numeric(n)
+  
+  for (i in window_size:n) {
+    sma_volatility[i] <- sd(returns[(i - window_size + 1):i])
+    
+    # Assuming a normal distribution for simplicity
+    z_score <- qnorm(1 - (1 - confidence_level) / 2)
+    var_sma[i] <- sma_volatility[i] * z_score
+  }
+  
+  return(list(volatility = sma_volatility, VaR = var_sma))
+}
+
+# Set parameters
+sma_window_size <- 10
+
+# Calculate SMA volatility and VaR for the portfolio
+sma_results <- calculate_sma_var_daily(portfolio_returns, sma_window_size, confidence_level)
+
+# Print results (for example, printing the first 10 values)
+cat("Portfolio SMA Volatility:\n", head(sma_results$volatility, 10), "\n")
+cat("Portfolio SMA VaR:\n", head(sma_results$VaR*initial_asset_value, 10), "\n")
+
+```
+
+
+
+
+
+```{r}
+# Convert the 'Date' column to a Date object
+project_Data$Date <- as.Date(project_Data$Date)
+
+# Create a ggplot object
+p <- ggplot(project_Data, aes(x = Date, y = Price_oil)) +
+  geom_line() +
+  labs(title = "Oil Price Over Time",
+       x = "Date",
+       y = "Price_oil")
+
+# Display the plot
+print(p)
+```
+
+
+
+
+```{r}
+# Convert the 'Date' column to a Date object
+project_Data$Date <- as.Date(project_Data$Date)
+
+# Create a ggplot object
+p_1 <- ggplot(project_Data, aes(x = Date, y = Price_1)) +
+  geom_line() +
+  labs(title = "Henry Hub Over Time",
+       x = "Date",
+       y = "HHUB")
+
+# Display the plot
+print(p_1)
+```
+
+
+```{r}
+plot_data <- data.frame(Date = project_Data$Date, 
+                        GARCH_Volatility = garch_results$volatility,
+                        EWMA_Volatility = ewma_results$volatility,
+                        SMA_Volatility = sma_results$volatility)
+
+# Plot the volatilities
+ggplot(plot_data, aes(x = Date)) +
+  geom_line(aes(y = GARCH_Volatility), size = 1) +
+  labs(title = "Volatility garch",
+       x = "Date",
+       y = "Garch_Volatility") 
+
+```
+```{r}
+plot_data <- data.frame(Date = project_Data$Date, 
+                        GARCH_Volatility = garch_results$volatility,
+                        EWMA_Volatility = ewma_results$volatility,
+                        SMA_Volatility = sma_results$volatility)
+
+# Plot the volatilities
+ggplot(plot_data, aes(x = Date)) +
+  geom_line(aes(y = EWMA_Volatility, color = "EWMA"), size = 1) 
+  
+```
+```{r}
+plot_data <- data.frame(Date = project_Data$Date, 
+                        GARCH_Volatility = garch_results$volatility,
+                        EWMA_Volatility = ewma_results$volatility,
+                        SMA_Volatility = sma_results$volatility)
+
+# Plot the volatilities
+ggplot(plot_data, aes(x = Date)) +
+  geom_line(aes(y = SMA_Volatility, color = "sma"), size = 1) 
+  
+```
+
+```{r dev=png}
+plot_data <- data.frame(Date = project_Data$Date, 
+                        GARCH_Volatility = garch_results$volatility,
+                        EWMA_Volatility = ewma_results$volatility,
+                        SMA_Volatility = sma_results$volatility)
+
+# Plot the volatilities
+ggplot(plot_data, aes(x = Date)) +
+  geom_line(aes(y = portfolio_returns), size = 1) +
+  labs(title = "Portfolio Returns",
+       x = "Date",
+       y = "portfolio_returns")
+  
+```
+#compute compound return.
+```{r}
+# Calculate cumulative return for each day
+cumulative_returns <- cumprod(1 + portfolio_returns) - 1
+print(cumulative_returns)
+
+```
+
+```{r}
+plot_data <- data.frame(Date = project_Data$Date, 
+                        GARCH_Volatility = garch_results$volatility,
+                        EWMA_Volatility = ewma_results$volatility,
+                        SMA_Volatility = sma_results$volatility)
+
+# Plot the volatilities
+ggplot(plot_data, aes(x = Date)) +
+  geom_line(aes(y = cumulative_returns), size = 1) +
+  labs(title = "Compound Portfolio Returns",
+       x = "Date",
+       y = "compound returns")
+```
+
+
+
+
+
+
+
+
+```{r}
+library(timeSeries)
+# Assuming portfolio_returns is a time series with a 'Date' index
+portfolio_retu <- as.timeSeries(project_Data$portfolio_returns)
+
+# Extract returns from the time series
+returns <- as.numeric(coredata(portfolio_retu))
+
+# Calculate actual volatility using rolling standard deviation
+actual_volatility <- rollapply(returns, width = 10, FUN = sd, align = "right", fill = NA)
+
+# Remove NAs introduced by the rolling standard deviation calculation
+actual_volatility <- actual_volatility[complete.cases(actual_volatility)]
+
+# Calculate RMSE for each model
+rmse_garch <- sqrt(mean((garch_results$volatility - actual_volatility)^2))
+rmse_ewma <- sqrt(mean((ewma_results$volatility - actual_volatility)^2))
+rmse_sma <- sqrt(mean((sma_results$volatility - actual_volatility)^2))
+
+# Print RMSE values
+cat("RMSE for GARCH model:", rmse_garch, "\n")
+cat("RMSE for EWMA model:", rmse_ewma, "\n")
+cat("RMSE for SMA model:", rmse_sma, "\n")
+```
+

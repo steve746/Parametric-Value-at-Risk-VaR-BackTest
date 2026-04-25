@@ -1,0 +1,325 @@
+---
+title: "649"
+author: "Arthur Steve Tchoneteck"
+date: "2023-11-20"
+output: html_document
+---
+
+
+
+
+```{r}
+library(tidyverse)
+library(astsa)
+library(forecast)
+library(stats)
+library(ggplot2)
+library(quantmod)
+library(dplyr)
+library(tidyquant)
+library(timetk)
+library(tidyr)
+library(zoo)
+library(PerformanceAnalytics)
+library(rugarch)
+```
+
+
+
+
+```{r }
+WTI= read.csv("WTI_OIL.csv")
+HHUB=read.csv("HENRY_HUB.csv")
+
+#CONVERT THE FORMAT DATE
+WTI$Date <- format(as.Date(WTI$Date, format = "%m/%d/%Y"), "%Y-%m-%d")
+HHUB$Date <- format(as.Date(HHUB$Date, format = "%m/%d/%Y"), "%Y-%m-%d")
+
+#Convert data in numeric
+WTI$Price_oil=as.numeric(WTI$Price_oil)
+HHUB$Price_1=as.numeric(HHUB$Price_1)
+
+
+# Function to replace NA values with the mean of the previous and next values
+impute_missing_with_mean <- function(series) {
+  for (i in 4:(length(series) - 1)) {
+    if (is.na(series[i])) {
+      series[i] <- (series[i -2 ] + series[i - 1]) / 2
+    }
+  }
+  return(series)
+}
+
+# Apply the imputation function to the specified column in your data frame
+WTI$Price_oil <- impute_missing_with_mean(WTI$Price_oil)
+HHUB$Price_1 <- impute_missing_with_mean(HHUB$Price_1)
+#compute the daily return
+
+
+
+```   
+
+```{r include=FALSE}
+# List of CSV files to combine
+data_list <- list(WTI, HHUB)
+
+# Create an empty data frame to store the combined data
+combined_df <- data_list[[1]]
+
+# Read and combine the CSV files while preserving common dates
+# Combine data frames while preserving common dates
+for (i in 2:length(data_list)) {
+  combined_df <- inner_join(combined_df, data_list[[i]], by = "Date")
+}
+
+# Save the combined data frame to a new CSV file
+write.csv(combined_df, "combined_data.csv", row.names = FALSE)
+```
+
+```{r dev='png',include=FALSE}
+project_Data=read.csv("combined_data.csv")
+
+#dailyreturn
+project_Data$WTI_Return <-  (diff(project_Data$Price_oil) / lag(project_Data$Price_oil, default = project_Data$Price_oil[1]))
+project_Data$HHUB_Return <-  (diff(project_Data$Price_1) / lag(project_Data$Price_1, default = project_Data$Price_1[1]))
+
+# Write the modified data frame to a new CSV file
+write.csv(project_Data, "data_return.csv", row.names = FALSE)
+
+
+```
+
+
+
+
+```{r}
+project_Data=read.csv("data_return.csv")
+
+#equal weight
+weights=c(0.5, 0.5)
+#  calculate portfolio returns
+portfolio_returns <- weights[1] * project_Data$WTI_Return + weights[2] * project_Data$HHUB_Return
+project_Data$portfolio_returns<-portfolio_returns  
+```
+
+
+
+
+```{r}
+# Function to calculate GARCH(1,1) volatility
+GARCH_volatility <- function(returns, omega, alpha, beta) {
+  n <- length(returns)
+  sigma <- numeric(n)
+  sigma[1] <- sd(returns)
+  
+  for (i in 2:n) {
+    sigma[i] <- sqrt(omega + alpha * returns[i-1]^2 + beta * sigma[i-1]^2)
+  }
+  
+  return(sigma)
+}
+
+# Set parameters
+omega_GARCH <- 0.0001
+alpha_GARCH <- 0.1
+beta_GARCH <- 0.8
+
+# Calculate GARCH volatility for the portfolio
+garch_volatility <- GARCH_volatility(portfolio_returns, omega_GARCH, alpha_GARCH, beta_GARCH)
+
+# Assuming a normal distribution for simplicity
+confidence_level <- 0.95
+z_score <- qnorm(1 - (1 - confidence_level) / 2)
+
+# Calculate VaR for the portfolio
+var_garch <- garch_volatility[length(garch_volatility)] * z_score  # Use the last volatility in GARCH
+
+# Calculate the potential loss in dollars
+initial_asset_value <- 10e6  # $10 million
+potential_loss <- initial_asset_value * var_garch
+
+# Print results
+cat("Portfolio GARCH VaR:", var_garch, "\n")
+cat("Potential Loss at", confidence_level, "confidence level:", potential_loss, "\n")
+```
+```{r}
+# Function to calculate GARCH volatility and VaR
+calculate_garch_var_daily <- function(returns, omega, alpha, beta, confidence_level) {
+  n <- length(returns)
+  garch_volatility_1<- numeric(n)
+  var_garch_1 <- numeric(n)
+  
+  for (i in 2:n) {
+    garch_volatility_1[i] <- sqrt(omega + alpha * returns[i-1]^2 + beta * garch_volatility[i-1]^2)
+    
+    # Assuming a normal distribution for simplicity
+    z_score <- qnorm(1 - (1 - confidence_level) / 2)
+    var_garch_1[i] <- garch_volatility_1[i] * z_score
+  }
+  
+  return(list(volatility = garch_volatility_1, VaR = var_garch_1))
+}
+
+# Set parameters
+omega_GARCH <- 0.0001
+alpha_GARCH <- 0.1
+beta_GARCH <- 0.8
+confidence_level <- 0.95
+
+# Calculate GARCH volatility and VaR for the portfolio
+garch_results <- calculate_garch_var_daily(portfolio_returns, omega_GARCH, alpha_GARCH, beta_GARCH, confidence_level)
+
+# Print results (for example, printing the first 10 values)
+cat("Portfolio GARCH Volatility:\n", head(garch_results$volatility, 10), "\n")
+cat("Portfolio GARCH VaR:\n", head(garch_results$VaR*initial_asset_value, 10), "\n")
+
+
+# Function to calculate EWMA volatility and VaR
+calculate_ewma_var_daily <- function(returns, lambda, confidence_level) {
+  n <- length(returns)
+  ewma_volatility <- numeric(n)
+  var_ewma <- numeric(n)
+  
+  for (i in 2:n) {
+    ewma_volatility[i] <- sqrt(EMA(returns[i]^2, n = 1, alpha = lambda, wilder = FALSE))
+    
+    # Assuming a normal distribution for simplicity
+    z_score <- qnorm(1 - (1 - confidence_level) / 2)
+    var_ewma[i] <- ewma_volatility[i] * z_score
+  }
+  
+  return(list(volatility = ewma_volatility, VaR = var_ewma))
+}
+
+# Set parameters
+lambda_EWMA <- 0.94
+
+# Calculate EWMA volatility and VaR for the portfolio
+ewma_results <- calculate_ewma_var_daily(portfolio_returns, lambda_EWMA, confidence_level)
+
+# Print results (for example, printing the first 10 values)
+cat("Portfolio EWMA Volatility:\n", head(ewma_results$volatility, 10), "\n")
+cat("Portfolio EWMA VaR:\n", head(ewma_results$VaR*initial_asset_value, 10), "\n")
+
+```
+
+
+```{r}
+# Function to calculate SMA volatility and VaR
+calculate_sma_var_daily <- function(returns, window_size, confidence_level) {
+  n <- length(returns)
+  sma_volatility <- numeric(n)
+  var_sma <- numeric(n)
+  
+  for (i in window_size:n) {
+    sma_volatility[i] <- sd(returns[(i - window_size + 1):i])
+    
+    # Assuming a normal distribution for simplicity
+    z_score <- qnorm(1 - (1 - confidence_level) / 2)
+    var_sma[i] <- sma_volatility[i] * z_score
+  }
+  
+  return(list(volatility = sma_volatility, VaR = var_sma))
+}
+
+# Set parameters
+sma_window_size <- 10
+
+# Calculate SMA volatility and VaR for the portfolio
+sma_results <- calculate_sma_var_daily(portfolio_returns, sma_window_size, confidence_level)
+
+# Print results (for example, printing the first 10 values)
+cat("Portfolio SMA Volatility:\n", head(sma_results$volatility, 10), "\n")
+cat("Portfolio SMA VaR:\n", head(sma_results$VaR*initial_asset_value, 10), "\n")
+
+```
+
+
+
+
+
+```{r}
+# Convert the 'Date' column to a Date object
+project_Data$Date <- as.Date(project_Data$Date)
+
+# Create a ggplot object
+p <- ggplot(project_Data, aes(x = Date, y = Price_oil)) +
+  geom_line() +
+  labs(title = "Oil Price Over Time",
+       x = "Date",
+       y = "Price_oil")
+
+# Display the plot
+print(p)
+```
+
+
+
+
+```{r}
+# Convert the 'Date' column to a Date object
+project_Data$Date <- as.Date(project_Data$Date)
+
+# Create a ggplot object
+p_1 <- ggplot(project_Data, aes(x = Date, y = Price_1)) +
+  geom_line() +
+  labs(title = "Henry Hub Over Time",
+       x = "Date",
+       y = "HHUB")
+
+# Display the plot
+print(p_1)
+```
+
+```{r}
+# Function to calculate EWMA volatility
+#EWMA_volatility <- function(returns, lambda) {
+  #ewma <- EMA(returns, n = 10, alpha = lambda, wilder = FALSE)
+  #weights <- (1 - lambda)^(2 * (1:length(returns)) - 1)
+  #volatility <- sqrt(sum(weights * returns^2) / sum(weights))
+  #return(volatility)
+#}
+#lambda_EWMA <- 0.94  # EWMA smoothing parameter
+# Calculate EWMA volatility for the portfolio
+#ewma_volatility <- EWMA_volatility_portfolio(portfolio_returns, lambda_EWMA)
+
+#var_ewma <- ewma_volatility * z_score
+#potential_loss <- initial_asset_value * var_ewma
+#cat("Portfolio EWMA VaR:", var_ewma, "\n")
+#cat("Potential Loss with EWMA at", confidence_level, "confidence level:", potential_loss_ewma, "\n")
+```
+
+
+```{r}
+#sma_parametric_var <- function(returns, method = "SMA", confidence_level = 0.95) { 
+  # Simple Moving Average (SMA) method
+ # sigma_sma <- sd(returns)
+  #z_score <- qnorm(1 - (1 - confidence_level) / 2)
+ # var_sma_estimate <- z_score * sigma_sma
+  #return(var_sma_estimate)
+ # }  
+ #confidence_level = 0.95
+ #sma_var <- sma_parametric_var(portfolio_returns, method = "SMA", confidence_level =confidence_level)
+#initial_asset_value <- 10e6  # $10 million
+#potential_loss_sma <- initial_asset_value * sma_var
+
+# Print the results
+#cat("Portfolio sma VaR:", sma_var, "\n")
+#cat("Potential Loss at", confidence_level, "confidence level:", potential_loss_sma, "\n")
+
+```
+
+
+
+
+```{r}
+#calculate_ewma_var <- function(returns, lambda = 0.94, alpha = 0.05) {
+ # volatility1 <- sqrt(sum(lambda * (1 - lambda)^(seq_along(returns) - 1) * returns^2))
+  #z_score <- qnorm(1 - alpha/2)
+  #return(z_score * volatility1)
+#}
+#ewma_var1 <- calculate_ewma_var(portfolio_returns)
+#cat("Parametric VaR using EWMA:", round(ewma_var1 * 1e7, 2), "USD\n")
+#ewma_var1
+```
+
