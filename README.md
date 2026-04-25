@@ -1,352 +1,120 @@
-# Basket Pricing Under Log-Normal Models
+# Parametric VaR Backtesting
 
-This repository contains code, notes, and numerical experiments for pricing basket and spread options under multi-asset log-normal models. The project studies analytical approximation methods for European basket options whose payoffs depend on weighted combinations of correlated assets. The main objective is to develop pricing formulas that are mathematically transparent, computationally efficient, and accurate enough for practical use in commodity markets and other multi-asset settings.
+This repository contains the code, analysis, and results for a final project on **parametric Value at Risk (VaR) backtesting**. The project compares three volatility estimation methods for VaR calculation: **Simple Moving Average (SMA)**, **Exponentially Weighted Moving Average (EWMA)**, and **GARCH**. The study is carried out on a managed futures portfolio built from **WTI** and **Henry Hub** contracts with equal weights. :contentReference[oaicite:0]{index=0} :contentReference[oaicite:1]{index=1}
 
-The repository is based on the working paper **“On Basket Pricing Problems Under Log-Normal Models: Reviews and New Insights”** by Steve Tchoneteck, Sophia Zorek, Hasanjan Sayit, and Frederi Viens. The paper develops a unified probability-based framework for basket pricing, derives two complementary representations for standard baskets, and compares two analytical approximations against Monte Carlo benchmarks using soybean crush spread data.
+The main objective is to evaluate how these volatility models affect VaR estimation and backtesting performance. The analysis finds that **GARCH** performs best overall, followed by **EWMA**, while **SMA** tends to be less responsive to changing market conditions. :contentReference[oaicite:2]{index=2} :contentReference[oaicite:3]{index=3}
+
+---
+
+## Project Overview
+
+Value at Risk (VaR) is one of the most common tools used in finance to measure downside risk. In this project, VaR is estimated for a portfolio with an initial value of **$10 million**, invested with equal weights in the second nearby contracts of **WTI crude oil** and **Henry Hub natural gas**. The study compares parametric VaR under three different volatility estimation approaches. :contentReference[oaicite:4]{index=4} :contentReference[oaicite:5]{index=5}
+
+The project focuses only on the **parametric approach** to VaR. Under this framework, daily portfolio returns are assumed to be normally distributed, with one-day mean return taken as zero and volatility estimated using SMA, EWMA, or GARCH. :contentReference[oaicite:6]{index=6}
 
 ---
 
 ## Motivation
 
-Basket and spread options are important in practice because many real financial exposures depend on several correlated assets rather than one single underlying price. Typical examples include crack spreads in energy markets, crush spreads in agricultural markets, and multi-asset structured products. These derivatives are useful for hedging relative price movements and managing complex risk exposures, but unlike the single-asset Black–Scholes model, they usually do not admit simple closed-form pricing formulas.
+Correct estimation of VaR is important for financial institutions because it supports:
 
-The main mathematical challenge comes from the exercise boundary. Once a payoff involves several assets with positive and negative weights, valuation depends on sums and differences of correlated log-normal random variables. This makes exact pricing difficult, especially when fast calculations are needed for repeated pricing, calibration, or risk management. This project focuses on approximation methods that keep the pricing problem analytically manageable while still staying close to Monte Carlo benchmark prices.
+- capital requirement estimation
+- risk management
+- portfolio construction
+- scenario analysis
+- adaptation to market changes
 
----
-
-## Main Contributions
-
-This project develops and implements a basket pricing framework with the following main contributions:
-
-- expresses basket option prices as linear combinations of probabilities of Gaussian events
-- derives two useful representations for standard basket options:
-  - an exercise boundary integral representation
-  - a representation in terms of sums of correlated log-normal random variables
-- implements two fast analytical approximation methods:
-  - a three-moment shifted log-normal approximation
-  - an averaging/projection Black–Scholes-style approximation
-- compares both analytical methods against Monte Carlo simulation
-- applies the framework to soybean crush spread options using historical data
-
-A central practical result is that the averaging/projection method performs very well in the empirical study and remains close to Monte Carlo prices while being much faster to compute.
+These ideas are part of the motivation discussed in the report. :contentReference[oaicite:7]{index=7}
 
 ---
 
-## Repository Structure
+## Research Question
 
-A suggested repository structure is:
+The main question studied in this project is:
 
-```text
-.
-├── README.md
-├── paper/
-│   └── Upon request
-├── R/
-├── data/
-│   └── README.md
-├── figures/
-├── results/
-└── references/
-```
-
-### Folder description
-
-- `R/` contains scripts for calibration, pricing, simulations, tables, and plots
-- `data/` contains input data or notes explaining how the data should be organized
-- `figures/` contains exported charts for strike comparisons, convergence analysis, and maturity sensitivity
-- `results/` contains numerical outputs such as price tables, error summaries, and comparison metrics
-- `references/` can contain supporting notes or bibliography files if needed
-
----
-
-## Mathematical Background
-
-We consider a basket option written on `n` assets whose dynamics follow correlated geometric Brownian motions under the risk-neutral measure:
-
-```math
-dS_i(t) = r S_i(t)dt + \sigma_i S_i(t)dW_i(t), \qquad i=1,\dots,n,
-```
-
-where `r` is the risk-free rate, `\sigma_i` is the volatility of asset `i`, and the Brownian motions are correlated. The basket call payoff at maturity `T` is
-
-```math
-C(T) = e^{-rT}\, \mathbb{E}\left(\sum_{i=1}^n \omega_i S_i(T) - K\right)^+,
-```
-
-where `\omega_i` are the basket weights and `K` is the strike.
-
-The paper distinguishes between two important basket types:
-
-- **general basket**: weights may be positive or negative without restriction
-- **standard basket**: exactly one weight is positive and the others are negative
-
-This distinction matters because the paper develops its main analytical results for standard basket options and then discusses how some non-standard cases can be transformed into that setting.
-
----
-
-## Pricing Framework
-
-### 1. Probability Reformulation
-
-A first key step in the paper is to rewrite the basket option price as a linear combination of probabilities of Gaussian events. This reformulation separates the structural coefficients of the basket from the probability terms that need to be approximated.
-
-This point of view is useful because it makes the pricing problem easier to analyze and gives a common framework for different approximation methods.
-
-### 2. Exercise Boundary Representation
-
-For standard basket options, the paper derives an exercise boundary integral representation. This connects the problem to the classical literature that approximates the boundary through Taylor expansion. The representation is mathematically elegant and clarifies how the geometry of the exercise region enters the pricing formula.
-
-At the same time, this method has practical limits:
-- it still requires multidimensional integration
-- computational cost grows with dimension
-- accuracy depends on how well the boundary is approximated
-
-### 3. Sum-of-Lognormals Representation
-
-A second major representation expresses the standard basket price in terms of distribution functions of sums of positively weighted correlated log-normal random variables. This is important because it connects basket pricing to the broader literature on approximating sums of lognormals.
-
-This representation is the starting point for the two fast analytical methods implemented in the project.
+**How do SMA, EWMA, and GARCH compare when used to estimate volatility for parametric VaR and VaR backtesting?** :contentReference[oaicite:8]{index=8}
 
 ---
 
 ## Methods
 
-## Monte Carlo Benchmark
+The project follows the standard parametric VaR procedure:
 
-Monte Carlo simulation is used as the benchmark pricing method. Under the risk-neutral measure, correlated normal draws are simulated, terminal asset prices are generated, and discounted payoffs are averaged. This gives a flexible and accurate benchmark, but it is computationally more expensive than analytical approximations.
+1. Mark the portfolio to market at time \(V_0\)
+2. Assume one-day expected return is zero
+3. Estimate one-day volatility \(\sigma_{1|0}\)
+4. Compute parametric VaR using the normal approximation
 
-Monte Carlo is especially useful here because it provides a reference for checking how close the approximation methods are across strikes and maturities.
+The report uses the formula
+\[
+\hat r = -1.65 \sigma_{1|0} + \mu_{1|0},
+\]
+with \(\mu_{1|0} = 0\), and then calculates portfolio loss from the resulting one-day value forecast. :contentReference[oaicite:9]{index=9}
 
-## Method 1: Three-Moment Matching
+### Volatility Models
 
-The first analytical method approximates each sum of correlated log-normal random variables by a shifted log-normal random variable. The parameters of the shifted log-normal distribution are chosen by matching the first three moments.
+#### 1. Simple Moving Average (SMA)
+SMA estimates volatility by equally weighting historical returns over a fixed window. The report notes that this approach can overestimate risk because all past returns are treated the same way. :contentReference[oaicite:10]{index=10} :contentReference[oaicite:11]{index=11}
 
-This approach is attractive because:
-- the required moments can be computed in closed form
-- the approximation becomes fully analytical once the moments are known
-- the method captures skewness better than a simple two-moment fit
+#### 2. Exponentially Weighted Moving Average (EWMA)
+EWMA assigns more weight to recent observations and less weight to older ones. In the report, EWMA is described as more responsive than SMA and better at adapting to recent volatility changes. :contentReference[oaicite:12]{index=12}
 
-However, the empirical results in the paper show that this method tends to overprice options, especially for out-of-the-money strikes and longer maturities.
-
-## Method 2: Averaging / Projection Method (Avg-BS)
-
-The second analytical method is the main practical contribution of the paper. It reduces the multidimensional pricing problem to a sequence of single-factor Black–Scholes-style calculations.
-
-The idea is to:
-1. normalize the coefficients in each probability term
-2. interpret them as portfolio weights
-3. project the correlated log-normal sum onto an effective single-factor log-normal variable
-4. compute the approximate probability with a standard normal CDF
-
-This method is simple, fast, and scales well with dimension. In the numerical study, it performs much better than the moment-matching method and stays very close to Monte Carlo prices.
+#### 3. GARCH
+GARCH models conditional variance dynamically using past shocks and past variance. In this project, it gives the lowest volatility estimates among the three methods and the best overall performance in risk prediction and backtesting. :contentReference[oaicite:13]{index=13} :contentReference[oaicite:14]{index=14}
 
 ---
 
-## Data and Calibration
+## Data
 
-The empirical application in the paper focuses on the **soybean crush spread**, which represents the margin from processing soybeans into soybean meal and soybean oil. In the paper, the processed products are aggregated into a composite asset, so the pricing problem becomes a two-asset spread option.
+The project uses **WTI** and **Henry Hub** time series data from **Yahoo Finance**, with contract months taken in succession as an approximation to the second nearby rolling strategy. The portfolio is built with equal weights in the two assets. :contentReference[oaicite:15]{index=15}
 
-The calibration uses:
-- 15 years of daily settlement prices
-- 3,776 daily observations from 2010 to 2024
-- annualized volatility estimates
-- correlation estimated from daily log-returns`
-
-The paper studies 30-day spread call options at three strike levels:
-- ITM
-- ATM
-- OTM
-
-It also examines sensitivity across maturities `7`, `30`, `90`, and `180` days.
+The report also notes that this simplification was made because exact second nearby rolling data was not used directly. :contentReference[oaicite:16]{index=16}
 
 ---
 
-## Numerical Results
+## Results
 
-## Strike Grid Comparison
+The report shows that portfolio returns exhibit clear spikes, especially around 2020. The volatility plots for SMA, EWMA, and GARCH also show a strong spike during the 2020 oil market shock, when WTI moved dramatically. The discussion on page 11 notes that volatility estimates decrease from **SMA** to **EWMA** to **GARCH**. :contentReference[oaicite:17]{index=17}
 
-The strike grid analysis compares Monte Carlo, the averaging/projection method, and the three-moment matching method for 30-day options.
+### Main Findings
 
-Main findings:
-- the **Avg-BS** method achieves very small pricing errors relative to Monte Carlo
-- its mean relative error is about **2.28%**
-- the **moment matching** method is less accurate, with mean relative error around **12.57%**
-- moment matching systematically overprices, especially for OTM options
+- **SMA** gives the highest volatility estimates and can overestimate risk
+- **EWMA** is more responsive to recent price movements
+- **GARCH** gives the lowest volatility estimates and the best predictive performance
+- VaR for **WTI** is higher than for **Henry Hub** because WTI is more volatile
+- Backtesting results are consistent with the RMSE comparison: **GARCH performs best**, followed by **EWMA**, then **SMA** :contentReference[oaicite:18]{index=18} :contentReference[oaicite:19]{index=19}
 
-This is one of the main practical conclusions of the paper: the projection-based method is the stronger approximation in this setting.
-
-## Monte Carlo Convergence
-
-The paper also studies Monte Carlo convergence for the ATM 30-day option by increasing the number of simulation paths.
-
-Main findings:
-- Monte Carlo prices stabilize around `0.1704`
-- convergence is already strong by around `100,000` paths
-- analytical methods remain fixed because they are deterministic
-- Avg-BS stays close to the converged Monte Carlo value
-- moment matching remains noticeably above it
-
-This confirms both the quality of the Monte Carlo benchmark and the accuracy advantage of Avg-BS over the moment-based method.
-
-## Sensitivity to Maturity
-
-The paper evaluates option prices for maturities of `7`, `30`, `90`, and `180` days.
-
-Main findings:
-- Avg-BS tracks Monte Carlo well across all maturities
-- relative errors remain small and stable
-- moment matching becomes less accurate as maturity increases
-- the gap is especially visible for OTM options
-- both methods perform better for ITM options than for OTM options
-
-Overall, the maturity study shows that the projection method is robust across different option horizons.
+The report also states that a managed fund starting with **$10M** and staying long this portfolio would have declined by about **10%** over the period studied. This is illustrated by the compound portfolio return plot on page 15. :contentReference[oaicite:20]{index=20}
 
 ---
 
-## Why the Avg-BS Method Matters
+## Figures Included
 
-A major message of the paper is that the averaging/projection method offers a strong balance between speed and accuracy.
+The report includes the following visual outputs:
 
-Its advantages are:
-- fully analytical once the effective parameters are computed
-- requires only standard normal CDF evaluations
-- avoids costly multidimensional integration
-- scales naturally to higher-dimensional baskets
-- remains close to Monte Carlo in the empirical application
-
-Because of these features, the method is attractive for practical pricing, repeated valuation tasks, and real-time risk applications.
-
----
-
-## How to Run the Code
-
-1. Clone this repository.
-2. Open the project in **RStudio**.
-3. Put the data files in the `data/` folder or follow the instructions in `data/README.md`.
-4. Install the required R packages.
-5. Run the scripts in the following order:
-
-
-6. Check the generated tables in `results/` and exported plots in `figures/`.
+- snapshot of the WTI and NG data used
+- portfolio daily returns
+- volatility estimate using SMA
+- volatility estimate using EWMA
+- volatility estimate using GARCH
+- VaR for individual assets
+- portfolio VaR using SMA
+- portfolio VaR using EWMA
+- portfolio VaR using GARCH
+- long portfolio performance :contentReference[oaicite:21]{index=21} :contentReference[oaicite:22]{index=22} :contentReference[oaicite:23]{index=23}
 
 ---
 
-## Required R Packages
+## Repository Structure
 
-Depending on your final scripts, you may need packages such as:
-
-```r
-install.packages(c(
-  "tidyverse",
-  "data.table",
-  "mvtnorm",
-  "ggplot2",
-  "Matrix"
-))
-```
-
-If you use other packages for simulation, optimization, or table formatting, add them here.
-
----
-
-## Expected Output
-
-The code in this repository is expected to produce:
-
-- Monte Carlo benchmark prices
-- analytical prices from the three-moment matching method
-- analytical prices from the Avg-BS method
-- tables of absolute and relative pricing errors
-- Monte Carlo convergence tables and plots
-- maturity sensitivity tables and plots
-- figures comparing the three methods across strikes
-
-
----
-
-## Visual Results
-
-The repository also includes figures that summarize the main numerical findings of the paper. These plots make it easier to see how the analytical approximations behave across strike levels, simulation paths, and option maturities.
-
-### Spread Call Price by Strike (30 Days)
-
-This bar chart compares Monte Carlo, Avg-BS, and moment matching prices at three strike levels for 30-day maturity. The Avg-BS method stays very close to Monte Carlo, while the moment-matching method tends to overprice, especially away from the center.
-
-![Spread Call Price by Strike (30 Days)](figures/spread_call_price_by_strike_30d.png)
-
-### Monte Carlo Convergence at ATM (30 Days)
-
-This figure shows how the Monte Carlo estimate stabilizes as the number of simulated paths increases. The Avg-BS line stays close to the converged Monte Carlo benchmark, while the moment-matching approximation remains visibly above it.
-
-![Monte Carlo Convergence at ATM (30 Days)](figures/mc_convergence_atm_30d.png)
-
-### Price vs Maturity
-
-This panel compares prices across maturities for ITM, ATM, and OTM strikes. The Avg-BS method closely tracks Monte Carlo over the whole maturity range, while moment matching shows a wider gap as maturity increases.
-
-![Price vs Maturity](figures/price_vs_maturity.png)
-
-### Price vs Strike (30 Days)
-
-This figure shows the full strike curve for 30-day maturity. Prices decrease smoothly as strike increases, and Avg-BS remains close to Monte Carlo across the strike grid. The moment-matching method is consistently above both, confirming its upward pricing bias.
-
-![Price vs Strike (30 Days)](figures/price_vs_strike_30d.png)
-
-### Residual: MC - Avg-BS across Strike and Maturity
-
-This panel shows the residual error between Monte Carlo and Avg-BS over the strike grid for each maturity. The residuals remain small and structured, which supports the conclusion that Avg-BS is stable and systematically close to the benchmark.
-
-![Residual = MC - Avg-BS across Strike and Maturity](figures/residual_mc_minus_avgbs.png)
-
-### Relative Error of Avg-BS across Strike and Maturity
-
-This panel reports the relative error of Avg-BS by strike and maturity. The error is smallest around lower and near-the-money strikes and becomes larger for more extreme OTM strikes, especially at short maturity.
-
-![Relative Error of Avg-BS across Strike and Maturity](figures/relative_error_avgbs_panels.png)
-
-### Relative Error Heatmap of Avg-BS
-
-The heatmap gives a compact view of how Avg-BS error varies jointly with strike and maturity. It confirms that the approximation remains strongest around lower and moderate strikes, while errors increase in the far OTM region.
-
-![Relative Error Heatmap of Avg-BS](figures/relative_error_avgbs_heatmap.png)
-
----
-
-## Paper
-
-The full methodology, derivations, and empirical validation are provided in the working paper wich will be available upon request.
-
----
-
-## Authors
-
-- Steve Tchoneteck
-- Sophia Zorek
-- Hasanjan Sayit
-- Frederi Viens
-
----
-
-## Citation
-
-If you use this repository or build on the methods, please cite the working paper:
+A clean structure for this repository could look like this:
 
 ```text
-Tchoneteck, S., Zorek, S., Sayit, H., and Viens, F.
-On Basket Pricing Problems Under Log-Normal Models: Reviews and New Insights.
-Working paper, 2026.
-```
-
----
-
-## Notes
-
-This repository can be extended in several directions, including:
-
-- higher-dimensional basket options
-- additional empirical applications in energy or agricultural spreads
-- further comparison with other analytical approximations
-- calibration and hedging studies
-- sensitivity analysis with respect to correlation and volatility structure
-
-The current project emphasizes simple, fast, and interpretable approximations that remain close to benchmark Monte Carlo prices.
+.
+├── README.md
+├── data/
+├── R/
+├── figures/
+├── results/
+└── report/
+    └── STAT_649_Report.pdf
